@@ -4,6 +4,14 @@ import { trackUserSignedUp } from "@/lib/analytics/posthog";
 
 type Mode = "signin" | "signup";
 
+const APPLE_SIGNIN_FALLBACK =
+  "Sign in with Apple failed. Please try again or use email sign-in.";
+
+function displayAuthError(message: string | null | undefined, fallback: string): string {
+  const trimmed = message?.trim();
+  return trimmed || fallback;
+}
+
 export function Auth() {
   const { signIn, signUp, signInWithApple, signInWithGoogle, oauthError, clearOauthError } =
     useAuth();
@@ -14,41 +22,70 @@ export function Auth() {
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const visibleError = error || (oauthError ? displayAuthError(oauthError, APPLE_SIGNIN_FALLBACK) : null);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    clearOauthError();
     setBusy(true);
 
-    const result =
-      mode === "signin" ? await signIn(email, password) : await signUp(email, password);
+    try {
+      const result =
+        mode === "signin" ? await signIn(email, password) : await signUp(email, password);
 
-    if (result.error) {
-      setError(result.error);
-    } else if (mode === "signup") {
-      trackUserSignedUp();
-      setInfo("Check your email to confirm your account, then sign in.");
+      if (result.error) {
+        setError(displayAuthError(result.error, "Sign in failed. Please try again."));
+      } else if (mode === "signup") {
+        trackUserSignedUp();
+        setInfo("Check your email to confirm your account, then sign in.");
+      }
+    } catch (err) {
+      setError(displayAuthError((err as Error).message, "Sign in failed. Please try again."));
+    } finally {
+      setBusy(false);
     }
-
-    setBusy(false);
   }
 
   async function handleApple() {
     setError(null);
+    setInfo(null);
     clearOauthError();
     setBusy(true);
-    const result = await signInWithApple();
-    if (result.error) setError(result.error);
-    setBusy(false);
+
+    try {
+      const result = await signInWithApple();
+      if (result.error) {
+        setError(displayAuthError(result.error, APPLE_SIGNIN_FALLBACK));
+      }
+    } catch (err) {
+      setError(displayAuthError((err as Error).message, APPLE_SIGNIN_FALLBACK));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleGoogle() {
     setError(null);
+    setInfo(null);
     clearOauthError();
     setBusy(true);
-    const result = await signInWithGoogle();
-    if (result.error) setError(result.error);
-    setBusy(false);
+
+    try {
+      const result = await signInWithGoogle();
+      if (result.error) {
+        setError(
+          displayAuthError(result.error, "Google sign in failed. Please try again or use email."),
+        );
+      }
+    } catch (err) {
+      setError(
+        displayAuthError((err as Error).message, "Google sign in failed. Please try again or use email."),
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -85,8 +122,14 @@ export function Auth() {
           className="fc-glass w-full rounded-2xl px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/40"
         />
 
-        {error && <p className="text-center text-sm text-pink-400">{error}</p>}
-        {oauthError && <p className="text-center text-sm text-pink-400">{oauthError}</p>}
+        {visibleError && (
+          <div
+            role="alert"
+            className="rounded-2xl border border-pink-400/30 bg-pink-500/10 px-4 py-3 text-center text-sm text-pink-300"
+          >
+            {visibleError}
+          </div>
+        )}
         {info && <p className="text-center text-sm text-emerald-400">{info}</p>}
 
         <button
@@ -134,6 +177,7 @@ export function Auth() {
             setMode(mode === "signin" ? "signup" : "signin");
             setError(null);
             setInfo(null);
+            clearOauthError();
           }}
           className="font-semibold text-pink-400"
         >

@@ -1,16 +1,18 @@
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "./client";
 
+const WEB_OAUTH_CALLBACK = "https://quippr.app/app";
 const NATIVE_OAUTH_CALLBACK = "com.quippr.app://auth/callback";
+const APPLE_BUNDLE_ID = "com.quippr.app";
+const APPLE_SERVICES_ID = "com.quippr.app.web";
+const SUPABASE_AUTH_CALLBACK = "https://bdnfxsqixsbrlvfjgkmi.supabase.co/auth/v1/callback";
 
 /** OAuth redirect URL after sign-in (must be listed in Supabase → Auth → URL Configuration). */
 export function getOAuthRedirectUrl(): string {
   if (Capacitor.isNativePlatform()) {
     return NATIVE_OAUTH_CALLBACK;
   }
-
-  const base = import.meta.env.VITE_APP_URL?.replace(/\/$/, "") || "https://quippr.app";
-  return `${base}/app`;
+  return WEB_OAUTH_CALLBACK;
 }
 
 async function closeOAuthBrowser() {
@@ -28,7 +30,8 @@ export async function handleOAuthCallback(url: string): Promise<{ error: string 
   try {
     const parsed = new URL(url);
     const code = parsed.searchParams.get("code");
-    const errorDescription = parsed.searchParams.get("error_description");
+    const errorDescription =
+      parsed.searchParams.get("error_description") || parsed.searchParams.get("error");
 
     if (errorDescription) {
       return { error: decodeURIComponent(errorDescription.replace(/\+/g, " ")) };
@@ -57,33 +60,133 @@ export async function handleOAuthCallback(url: string): Promise<{ error: string 
 
     return { error: null };
   } catch (e) {
-    return { error: (e as Error).message };
+    return { error: (e as Error).message || "Sign in failed. Please try again." };
+  }
+}
+
+function formatOAuthError(provider: "google" | "apple", message?: string | null): string {
+  const trimmed = message?.trim();
+  if (trimmed) {
+    if (/invalid[_ ]?client/i.test(trimmed)) {
+      return provider === "apple"
+        ? "Apple Sign In is misconfigured (invalid client). Contact support or use email sign-in."
+        : trimmed;
+    }
+    return trimmed;
+  }
+
+  return provider === "apple"
+    ? "Sign in with Apple failed. Please try again or use email sign-in."
+    : "Google sign in failed. Please try again or use email sign-in.";
+}
+
+function createNonce(length = 32): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Native Sign in with Apple on iOS — avoids browser OAuth "invalid_client". */
+async function signInWithAppleNative(): Promise<{ error: string | null }> {
+  try {
+    const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
+    const rawNonce = createNonce();
+    const hashedNonce = await sha256Hex(rawNonce);
+
+    const result = await SignInWithApple.authorize({
+      clientId: APPLE_BUNDLE_ID,
+      redirectURI: SUPABASE_AUTH_CALLBACK,
+      scopes: "email name",
+      nonce: hashedNonce,
+    });
+
+    const identityToken = result.response.identityToken;
+    if (!identityToken) {
+      return { error: formatOAuthError("apple", "Apple did not return an identity token.") };
+    }
+
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: "apple",
+      token: identityToken,
+      nonce: rawNonce,
+    });
+
+    if (error) return { error: formatOAuthError("apple", error.message) };
+
+    const given = result.response.givenName;
+    const family = result.response.familyName;
+    if (given || family) {
+      void supabase.auth.updateUser({
+        data: {
+          full_name: [given, family].filter(Boolean).join(" "),
+          given_name: given,
+          family_name: family,
+        },
+      });
+    }
+
+    return { error: null };
+  } catch (e) {
+    const message = (e as Error).message || String(e);
+    // User cancelled the Apple sheet — not an app error.
+    if (/cancel|canceled|cancelled|1001/i.test(message)) {
+      return { error: null };
+    }
+    return { error: formatOAuthError("apple", message) };
   }
 }
 
 export async function signInWithOAuthProvider(
   provider: "google" | "apple",
 ): Promise<{ error: string | null }> {
-  const redirectTo = getOAuthRedirectUrl();
-  const isNative = Capacitor.isNativePlatform();
-
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider,
-    options: {
-      redirectTo,
-      skipBrowserRedirect: isNative,
-      ...(provider === "apple" ? { scopes: "email name" } : {}),
-    },
-  });
-
-  if (error) return { error: error.message };
-
-  if (isNative && data.url) {
-    const { Browser } = await import("@capacitor/browser");
-    await Browser.open({ url: data.url });
+  // Prefer native Apple Sign In on iOS — browser OAuth often shows "invalid_client".
+  if (provider === "apple" && Capacitor.getPlatform() === "ios") {
+    return signInWithAppleNative();
   }
 
-  return { error: null };
+  try {
+    const redirectTo = getOAuthRedirectUrl();
+    const isNative = Capacitor.isNativePlatform();
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo,
+        skipBrowserRedirect: isNative,
+        ...(provider === "apple" ? { scopes: "email name" } : {}),
+      },
+    });
+
+    if (error) return { error: formatOAuthError(provider, error.message) };
+
+    if (isNative) {
+      if (!data.url) {
+        return { error: formatOAuthError(provider, "Could not start sign in. Please try again.") };
+      }
+
+      try {
+        const { Browser } = await import("@capacitor/browser");
+        await Browser.open({ url: data.url });
+      } catch (e) {
+        return {
+          error: formatOAuthError(
+            provider,
+            (e as Error).message || "Could not open the sign-in browser.",
+          ),
+        };
+      }
+    }
+
+    return { error: null };
+  } catch (e) {
+    return { error: formatOAuthError(provider, (e as Error).message) };
+  }
 }
 
 export function registerNativeOAuthListener(
@@ -97,9 +200,14 @@ export function registerNativeOAuthListener(
   void (async () => {
     const { App } = await import("@capacitor/app");
     const handle = await App.addListener("appUrlOpen", ({ url }) => {
-      if (!url.startsWith(NATIVE_OAUTH_CALLBACK)) return;
+      const isCallback =
+        url.startsWith(NATIVE_OAUTH_CALLBACK) ||
+        url.startsWith(WEB_OAUTH_CALLBACK) ||
+        url.startsWith("https://quippr.app/app");
+      if (!isCallback) return;
+
       void handleOAuthCallback(url).then((result) => {
-        if (result.error) onError(result.error);
+        if (result.error) onError(formatOAuthError("apple", result.error));
       });
     });
     if (removed) {
@@ -114,3 +222,5 @@ export function registerNativeOAuthListener(
     void listenerPromise?.then((handle) => handle.remove());
   };
 }
+
+export { APPLE_BUNDLE_ID, APPLE_SERVICES_ID };

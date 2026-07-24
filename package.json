@@ -10,11 +10,12 @@
     "preview": "vite preview",
     "cap:copy": "npx cap copy",
     "cap:sync": "npm run build && npx cap sync",
-    "cap:sync:ios": "npm run build && npx cap sync ios",
+    "cap:sync:ios": "npm run build && bash scripts/patch-apple-sign-in-spm.sh && npx cap sync ios",
     "cap:sync:android": "npm run build && npx cap sync android",
     "cap:open:ios": "bash scripts/open-xcode.sh",
     "ios:simulator": "bash scripts/open-xcode.sh",
     "cap:open:android": "npx cap open android",
+    "postinstall": "bash scripts/patch-apple-sign-in-spm.sh",
     "icons:ios": "bash scripts/generate-ios-app-icon.sh",
     "icons:android": "bash scripts/generate-android-app-icon.sh",
     "icons": "npm run icons:ios && npm run icons:android",
@@ -26,6 +27,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/android": "^8.3.4",
     "@capacitor/app": "^8.1.0",
     "@capacitor/browser": "^8.0.3",

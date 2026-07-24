@@ -45,11 +45,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setLoading(false);
-      if (s?.user?.id) identifyUser(s.user.id);
-    });
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        console.warn("[auth] getSession timed out — continuing without session");
+        setLoading(false);
+      }
+    }, 4000);
+
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session: s } }) => {
+        if (cancelled) return;
+        setSession(s);
+        setLoading(false);
+        if (s?.user?.id) identifyUser(s.user.id);
+      })
+      .catch((e) => {
+        console.error("[auth] getSession failed:", e);
+        if (!cancelled) setLoading(false);
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+      });
 
     const {
       data: { subscription },
@@ -68,7 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -87,12 +109,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     setOauthError(null);
-    return signInWithOAuthProvider("google");
+    try {
+      return await signInWithOAuthProvider("google");
+    } catch (e) {
+      const message =
+        (e as Error).message?.trim() ||
+        "Google sign in failed. Please try again or use email sign-in.";
+      setOauthError(message);
+      return { error: message };
+    }
   }, []);
 
   const signInWithApple = useCallback(async () => {
     setOauthError(null);
-    return signInWithOAuthProvider("apple");
+    try {
+      return await signInWithOAuthProvider("apple");
+    } catch (e) {
+      const message =
+        (e as Error).message?.trim() ||
+        "Sign in with Apple failed. Please try again or use email sign-in.";
+      setOauthError(message);
+      return { error: message };
+    }
   }, []);
 
   const clearOauthError = useCallback(() => setOauthError(null), []);

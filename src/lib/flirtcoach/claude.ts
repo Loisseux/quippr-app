@@ -1,5 +1,6 @@
 import type { Character } from "./data";
 import { SCENARIOS, type ScenarioId } from "./data";
+import { resolveAnthropicApiKey } from "./anthropic-config";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -7,10 +8,7 @@ const API_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-5";
 
 function getKey(): string {
-  const raw = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
-  const key = typeof raw === "string" ? raw.trim() : "";
-  if (!key) throw new Error("Missing VITE_ANTHROPIC_API_KEY");
-  return key;
+  return resolveAnthropicApiKey(import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined);
 }
 
 async function callClaude(

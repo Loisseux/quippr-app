@@ -1,6 +1,20 @@
 # Sign in with Apple — Supabase setup
 
-Quippr uses Supabase OAuth for Apple Sign In. Complete these steps in [Apple Developer](https://developer.apple.com) and the [Supabase Dashboard](https://supabase.com/dashboard).
+Quippr uses **native Sign in with Apple on iOS** (`signInWithIdToken`) and **OAuth on web**.  
+`invalid_client` almost always means the Apple / Supabase Client IDs or secret JWT are wrong.
+
+## Critical: Supabase Client IDs
+
+In **Authentication → Providers → Apple**, set **Client IDs** to (comma-separated, order matters):
+
+```
+com.quippr.app.web, com.quippr.app
+```
+
+1. **`com.quippr.app.web`** (Services ID) — must be **first** (used for web OAuth)
+2. **`com.quippr.app`** (App Bundle ID) — required for native iOS token audience
+
+If the App ID is listed first, native may work but web OAuth shows `invalid_client`.
 
 ## 1. Apple Developer
 
@@ -9,18 +23,18 @@ Quippr uses Supabase OAuth for Apple Sign In. Complete these steps in [Apple Dev
 2. Select `com.quippr.app` (or create it).
 3. Enable **Sign in with Apple** and save.
 
-### Services ID (for web OAuth)
+### Services ID (for web OAuth only)
 1. **Identifiers → + → Services IDs**
 2. Description: `Quippr Web Auth`
-3. Identifier: e.g. `com.quippr.app.web` (must be unique)
+3. Identifier: `com.quippr.app.web`
 4. Enable **Sign in with Apple → Configure**
 5. **Primary App ID:** `com.quippr.app`
-6. **Domains and Subdomains:** your Supabase project host, e.g. `abcdefghijklmnop.supabase.co`
+6. **Domains and Subdomains:** `bdnfxsqixsbrlvfjgkmi.supabase.co`
 7. **Return URLs:**  
-   `https://<PROJECT_REF>.supabase.co/auth/v1/callback`
-8. Save and note the **Services ID** (Client ID for Supabase).
+   `https://bdnfxsqixsbrlvfjgkmi.supabase.co/auth/v1/callback`
+8. Save.
 
-### Sign in with Apple key
+### Sign in with Apple key (for web OAuth secret)
 1. **Keys → +**
 2. Name: `Quippr Sign in with Apple`
 3. Enable **Sign in with Apple**, configure with Primary App ID `com.quippr.app`
@@ -33,13 +47,11 @@ Quippr uses Supabase OAuth for Apple Sign In. Complete these steps in [Apple Dev
 1. **Authentication → Providers → Apple**
 2. Enable Apple
 3. Fill in:
-   - **Client ID (Services ID):** `com.quippr.app.web`
-   - **Secret Key:** generate a client secret JWT (see below)
+   - **Client IDs:** `com.quippr.app.web, com.quippr.app`
+   - **Secret Key:** generate a client secret JWT (see below) — `sub` must be **`com.quippr.app.web`**
 4. Save
 
 #### Generate the client secret JWT
-
-Apple requires a signed JWT as the OAuth client secret. Use the included script (no extra dependencies):
 
 ```bash
 npm run apple:client-secret -- \
@@ -55,33 +67,35 @@ Or set `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID`, and `APPLE_PRIVATE_KE
 npm run apple:client-secret
 ```
 
-Copy the printed JWT into **Secret Key** in the Supabase Apple provider settings. The JWT expires after 180 days by default — regenerate and update Supabase before it expires.
+Copy the printed JWT into **Secret Key** in the Supabase Apple provider settings. The JWT expires after 180 days — regenerate before it expires.
 
-Some Supabase versions also accept the raw `.p8` contents with separate **Key ID** and **Team ID** fields instead of a JWT. If your dashboard shows those fields, you can paste the `.p8` file directly and skip the script.
+Decode the JWT at jwt.io and verify:
+- `iss` = your Team ID
+- `sub` = `com.quippr.app.web` (Services ID, **not** the App ID)
+- `aud` = `https://appleid.apple.com`
+- header `kid` = your Key ID
 
 ### Redirect URLs
 1. **Authentication → URL Configuration**
 2. Add these **Redirect URLs**:
-   - `https://flirt-coach-ten.vercel.app` (production)
-   - `http://localhost:5173` (local dev)
-   - Any other deployment URLs you use
-3. **Site URL:** `https://flirt-coach-ten.vercel.app`
+   - `https://quippr.app/app`
+   - `http://localhost:5173/app`
+   - `com.quippr.app://auth/callback`
+3. **Site URL:** `https://quippr.app`
 
-The app passes `redirectTo` from `VITE_APP_URL` (see `.env.example`). Ensure that URL is listed above.
+## 3. Xcode
 
-## 3. Environment
-
-```env
-VITE_APP_URL=https://flirt-coach-ten.vercel.app
-```
-
-After OAuth, Supabase redirects to this URL with the session in the URL hash; the app picks it up automatically.
+1. Open the iOS project (`npm run cap:open:ios`)
+2. Select the **App** target → **Signing & Capabilities**
+3. Confirm **Sign in with Apple** is present (repo includes `App.entitlements`)
+4. Ensure the App ID `com.quippr.app` has Sign in with Apple enabled in the Apple Developer portal and your provisioning profile includes it
 
 ## 4. Verify
 
-1. Deploy the latest web build (or run `npm run dev` locally).
-2. Open the auth screen and tap **Continue with Apple**.
-3. Complete Apple sign-in and confirm you land back in the app signed in.
+1. Rebuild: `npm run cap:sync:ios`
+2. On a real device or simulator signed into an Apple ID, tap **Continue with Apple**
+3. You should see the native Apple sheet (not a Safari “invalid_client” page)
+4. After approving, you land in the app signed in
 
 ## App Store note
 

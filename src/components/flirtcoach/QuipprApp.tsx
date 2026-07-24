@@ -35,10 +35,17 @@ export function QuipprApp() {
   const [startingChat, setStartingChat] = useState(false);
 
   useEffect(() => {
-    setConsentGiven(hasGdprConsent());
-    const done = localStorage.getItem("fc_onboarded") === "1";
-    setScreen(done ? "home" : "onboarding");
-    setHydrated(true);
+    try {
+      setConsentGiven(hasGdprConsent());
+      const done = localStorage.getItem("fc_onboarded") === "1";
+      setScreen(done ? "home" : "onboarding");
+    } catch (e) {
+      console.error("Failed to read local app state:", e);
+      setConsentGiven(false);
+      setScreen("onboarding");
+    } finally {
+      setHydrated(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -91,7 +98,14 @@ export function QuipprApp() {
   }
 
   if (!hydrated || authLoading) {
-    return <div className="fc-app-shell min-h-[100dvh]" />;
+    return (
+      <div className="fc-app-shell mx-auto flex w-full max-w-[430px] flex-col items-center justify-center px-6">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl fc-gradient text-2xl">
+          ✨
+        </div>
+        <p className="text-sm font-medium text-white/70">Loading Quippr…</p>
+      </div>
+    );
   }
 
   if (!consentGiven) {

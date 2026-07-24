@@ -3,5 +3,12 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "routes": [
+    { "src": "/privacy-policy.html", "dest": "/privacy-policy.html" },
+    { "src": "/terms.html", "dest": "/terms.html" },
+    { "src": "/delete-account.html", "dest": "/delete-account.html" },
+    { "src": "/app-icon.png", "dest": "/app-icon.png" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }

@@ -11,6 +11,10 @@ import {
   resolveSupabaseAnonKey,
   resolveSupabaseUrl,
 } from "./src/lib/supabase/config";
+import {
+  DEFAULT_ANTHROPIC_API_KEY,
+  resolveAnthropicApiKey,
+} from "./src/lib/flirtcoach/anthropic-config";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +29,8 @@ function viteEnvFromProjectRoot(): Plugin {
         VITE_SUPABASE_URL: resolveSupabaseUrl(loaded.VITE_SUPABASE_URL) || DEFAULT_SUPABASE_URL,
         VITE_SUPABASE_ANON_KEY:
           resolveSupabaseAnonKey(loaded.VITE_SUPABASE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY,
+        VITE_ANTHROPIC_API_KEY:
+          resolveAnthropicApiKey(loaded.VITE_ANTHROPIC_API_KEY) || DEFAULT_ANTHROPIC_API_KEY,
       };
 
       return {
