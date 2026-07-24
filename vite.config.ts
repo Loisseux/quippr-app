@@ -6,8 +6,6 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import {
-  DEFAULT_SUPABASE_ANON_KEY,
-  DEFAULT_SUPABASE_URL,
   resolveSupabaseAnonKey,
   resolveSupabaseUrl,
 } from "./src/lib/supabase/config";
@@ -26,9 +24,8 @@ function viteEnvFromProjectRoot(): Plugin {
       const loaded = loadEnv(mode, projectRoot, "VITE_");
       const envEntries = {
         ...loaded,
-        VITE_SUPABASE_URL: resolveSupabaseUrl(loaded.VITE_SUPABASE_URL) || DEFAULT_SUPABASE_URL,
-        VITE_SUPABASE_ANON_KEY:
-          resolveSupabaseAnonKey(loaded.VITE_SUPABASE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY,
+        VITE_SUPABASE_URL: resolveSupabaseUrl(loaded.VITE_SUPABASE_URL),
+        VITE_SUPABASE_ANON_KEY: resolveSupabaseAnonKey(loaded.VITE_SUPABASE_ANON_KEY),
         VITE_ANTHROPIC_API_KEY:
           resolveAnthropicApiKey(loaded.VITE_ANTHROPIC_API_KEY) || DEFAULT_ANTHROPIC_API_KEY,
       };

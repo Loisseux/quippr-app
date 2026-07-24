@@ -5,7 +5,11 @@ const WEB_OAUTH_CALLBACK = "https://quippr.app/app";
 const NATIVE_OAUTH_CALLBACK = "com.quippr.app://auth/callback";
 const APPLE_BUNDLE_ID = "com.quippr.app";
 const APPLE_SERVICES_ID = "com.quippr.app.web";
-const SUPABASE_AUTH_CALLBACK = "https://bdnfxsqixsbrlvfjgkmi.supabase.co/auth/v1/callback";
+
+function getSupabaseAuthCallback(): string {
+  const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "");
+  return base ? `${base}/auth/v1/callback` : "https://placeholder.supabase.co/auth/v1/callback";
+}
 
 /** OAuth redirect URL after sign-in (must be listed in Supabase → Auth → URL Configuration). */
 export function getOAuthRedirectUrl(): string {
@@ -101,7 +105,7 @@ async function signInWithAppleNative(): Promise<{ error: string | null }> {
 
     const result = await SignInWithApple.authorize({
       clientId: APPLE_BUNDLE_ID,
-      redirectURI: SUPABASE_AUTH_CALLBACK,
+      redirectURI: getSupabaseAuthCallback(),
       scopes: "email name",
       nonce: hashedNonce,
     });
