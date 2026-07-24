@@ -1,8 +1,11 @@
-/** Fallback so iOS Capacitor builds work when env vars are missing at build time. */
-export const DEFAULT_ANTHROPIC_API_KEY =
-  "REMOVED_KEY";
-
+/**
+ * Anthropic API key must come from the environment:
+ * - Locally: set VITE_ANTHROPIC_API_KEY in `.env`
+ * - Production: set VITE_ANTHROPIC_API_KEY in Vercel
+ * - Native (Capacitor): set it before `npm run build` / `cap:sync` so it is baked into the bundle
+ *
+ * Never hardcode Anthropic API keys in source — secret scanning will block the push.
+ */
 export function resolveAnthropicApiKey(envValue: string | undefined): string {
-  const value = typeof envValue === "string" ? envValue.trim() : "";
-  return value || DEFAULT_ANTHROPIC_API_KEY;
+  return typeof envValue === "string" ? envValue.trim() : "";
 }

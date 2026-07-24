@@ -8,7 +8,13 @@ const API_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-5";
 
 function getKey(): string {
-  return resolveAnthropicApiKey(import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined);
+  const key = resolveAnthropicApiKey(import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined);
+  if (!key) {
+    throw new Error(
+      "Missing VITE_ANTHROPIC_API_KEY — set it in .env locally and in Vercel for production.",
+    );
+  }
+  return key;
 }
 
 async function callClaude(
